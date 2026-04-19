@@ -114,23 +114,10 @@
       </label>
 
       <fieldset class="maschine-box">
-        <legend>Maschine (optional)</legend>
-        <label>Maschine
-          <select id="e-maschine">
-            <option value="">— keine —</option>
-          </select>
-        </label>
-        <div class="two-col">
-          <label>Anzahl / Std.
-            <input id="e-masch-std" type="number" step="0.25" min="0" value="0" inputmode="decimal" />
-          </label>
-          <label>Ansatz (CHF)
-            <input id="e-ansatz" type="number" step="0.01" min="0" value="0" inputmode="decimal" />
-          </label>
-        </div>
-        <label>Betrag
-          <input id="e-betrag" type="text" readonly />
-        </label>
+        <legend>Maschinen (optional, mehrere möglich)</legend>
+        <div id="e-maschinen-list"></div>
+        <button type="button" id="btn-add-maschine" class="secondary small-btn">+ Weitere Maschine</button>
+        <div class="total-line">Maschinen-Betrag gesamt: <strong id="e-betrag-total">CHF 0.00</strong></div>
       </fieldset>
 
       <label>Bemerkung

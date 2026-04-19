@@ -98,6 +98,70 @@ h2 { font-size: 1.2rem; color: var(--green-dark); }
 }
 .maschine-box legend { padding: 0 .4rem; color: var(--muted); font-size: .85rem; }
 
+/* Maschine-Zeile (mehrere pro Eintrag möglich) */
+.m-row {
+  display: flex; flex-direction: column; gap: .4rem;
+  padding: .6rem;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: #fafaf8;
+  margin-bottom: .5rem;
+  position: relative;
+}
+.m-row .m-header { display: flex; justify-content: space-between; align-items: center; font-size: .75rem; color: var(--muted); }
+.m-row .m-remove {
+  background: transparent; border: 0; color: var(--danger);
+  cursor: pointer; font-size: 1.1rem; padding: .2rem .4rem;
+  min-width: 44px; min-height: 32px;
+}
+.m-row .m-search {
+  width: 100%; padding: .55rem .6rem;
+  border: 1px solid var(--border); border-radius: 6px;
+  font: inherit;
+}
+.m-row .m-select {
+  width: 100%; padding: .55rem .6rem;
+  border: 1px solid var(--border); border-radius: 6px;
+  font: inherit; background: white;
+  min-height: 40px;
+}
+.m-row .m-betrag {
+  font-weight: 600; color: var(--green-dark);
+  text-align: right;
+  font-size: .9rem;
+}
+.total-line {
+  text-align: right; margin-top: .5rem; font-size: .95rem; color: var(--text);
+}
+.total-line strong { color: var(--green-dark); font-size: 1.1rem; }
+
+.small-btn { font-size: .85rem; padding: .5rem .8rem; min-height: 40px; }
+
+/* -------- Smartphone-Optimierung -------- */
+@media (max-width: 520px) {
+  .form input, .form select, .form textarea {
+    font-size: 16px;  /* verhindert iOS-Zoom beim Fokus */
+  }
+  .tab-panel { padding: .7rem; }
+  .topbar { padding: .6rem .7rem; }
+  .topbar .small { font-size: .7rem; }
+  .tab { padding: .75rem .5rem; font-size: .85rem; }
+  .filter-row { gap: .4rem; }
+  .filter-row label { flex: 1 1 45%; font-size: .75rem; }
+  .filter-row button { flex: 1 1 100%; }
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+  .summary-card .val { font-size: .95rem; }
+  table.rapport th, table.rapport td { padding: .3rem .35rem; font-size: .78rem; }
+
+  /* Sticky Submit-Button am Bildschirmrand */
+  #form-eintrag > button[type="submit"] {
+    position: sticky; bottom: .5rem;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+    z-index: 5;
+    font-size: 1rem;
+    padding: .9rem 1rem;
+  }
+}
+
 button.primary, button.secondary {
   font: inherit; font-weight: 600;
   padding: .8rem 1rem; border-radius: 8px;

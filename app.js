@@ -316,16 +316,18 @@ function fillArbeitsartenList() {
   $('#list-arbeitsarten').innerHTML = state.arbeitsarten.map(a => `<option value="${escapeAttr(a.name)}">`).join('');
 }
 
-function fillMaschinenSelect() {
-  const s = $('#e-maschine');
-  const v = s.value;
-  // Nach Kategorie gruppieren
+// Baut die Optionen für ein Maschinen-<select>, optional gefiltert nach Suchbegriff.
+function maschinenOptions(filterTerm = '') {
+  const term = filterTerm.trim().toLowerCase();
+  const filtered = !term ? state.maschinen : state.maschinen.filter(m =>
+    m.name.toLowerCase().includes(term)
+    || (m.kategorie || '').toLowerCase().includes(term)
+  );
   const groups = {};
-  for (const m of state.maschinen) {
+  for (const m of filtered) {
     const cat = m.kategorie || 'Übrige';
     (groups[cat] = groups[cat] || []).push(m);
   }
-  // Kategorien alphabetisch, Maschinen alphabetisch
   const parts = ['<option value="">— keine —</option>'];
   for (const cat of Object.keys(groups).sort((a,b) => a.localeCompare(b,'de'))) {
     parts.push(`<optgroup label="${escapeAttr(cat)}">`);
@@ -334,26 +336,140 @@ function fillMaschinenSelect() {
     }
     parts.push('</optgroup>');
   }
-  s.innerHTML = parts.join('');
-  s.value = v;
+  return parts.join('');
 }
 
-$('#e-maschine').addEventListener('change', e => {
-  const opt = e.target.options[e.target.selectedIndex];
-  if (opt.value) {
-    $('#e-ansatz').value = opt.dataset.ansatz || 0;
-  } else {
-    $('#e-ansatz').value = 0;
-  }
-  recalcBetrag();
-});
-$('#e-masch-std').addEventListener('input', recalcBetrag);
-$('#e-ansatz').addEventListener('input', recalcBetrag);
-function recalcBetrag() {
-  const s = Number($('#e-masch-std').value) || 0;
-  const a = Number($('#e-ansatz').value) || 0;
-  $('#e-betrag').value = 'CHF ' + fmtCHF(s * a);
+// Initialbefüllung aller bereits vorhandenen Maschinen-<select> Elemente
+function fillMaschinenSelect() {
+  document.querySelectorAll('.m-select').forEach(sel => {
+    const v = sel.value;
+    sel.innerHTML = maschinenOptions();
+    sel.value = v;
+  });
 }
+
+// Eine neue Maschinen-Zeile im Erfassen-Formular einfügen.
+function addMaschineRow(data) {
+  const list = $('#e-maschinen-list');
+  if (!list) return;
+  const rowIdx = list.children.length;
+  const row = document.createElement('div');
+  row.className = 'm-row';
+  row.innerHTML = `
+    <div class="m-header">
+      <span>Maschine ${rowIdx + 1}</span>
+      <button type="button" class="m-remove" title="Entfernen">✕</button>
+    </div>
+    <input type="search" class="m-search" placeholder="🔍 Maschine suchen (Name oder Kategorie)…" />
+    <select class="m-select"></select>
+    <div class="two-col">
+      <label>Anzahl / Std. / km / m³
+        <input class="m-std" type="number" step="0.25" min="0" value="0" inputmode="decimal" />
+      </label>
+      <label>Ansatz (CHF)
+        <input class="m-ansatz" type="number" step="0.01" min="0" value="0" inputmode="decimal" />
+      </label>
+    </div>
+    <div class="m-betrag">CHF 0.00</div>
+  `;
+  list.appendChild(row);
+
+  const sel = row.querySelector('.m-select');
+  const searchInput = row.querySelector('.m-search');
+  const stdInput = row.querySelector('.m-std');
+  const ansatzInput = row.querySelector('.m-ansatz');
+  const betragEl = row.querySelector('.m-betrag');
+
+  // Optionen befüllen
+  sel.innerHTML = maschinenOptions();
+
+  // Suche: filtert die Options in diesem Select
+  searchInput.addEventListener('input', () => {
+    const v = sel.value;
+    sel.innerHTML = maschinenOptions(searchInput.value);
+    // Auswahl behalten, wenn sie noch im gefilterten Set ist
+    if ([...sel.options].some(o => o.value === v)) sel.value = v;
+  });
+
+  // Auswahl → Ansatz automatisch setzen
+  sel.addEventListener('change', () => {
+    const opt = sel.options[sel.selectedIndex];
+    if (opt.value) {
+      ansatzInput.value = opt.dataset.ansatz || 0;
+    } else {
+      ansatzInput.value = 0;
+    }
+    recalcRowBetrag(row);
+  });
+
+  stdInput.addEventListener('input', () => recalcRowBetrag(row));
+  ansatzInput.addEventListener('input', () => recalcRowBetrag(row));
+
+  row.querySelector('.m-remove').addEventListener('click', () => {
+    row.remove();
+    renumberMaschinenRows();
+    recalcTotalBetrag();
+  });
+
+  // Vorbefüllen (wenn beim Bearbeiten ein bestehender Eintrag geladen wird)
+  if (data) {
+    if (data.maschine_id) sel.value = data.maschine_id;
+    stdInput.value = data.masch_std ?? 0;
+    ansatzInput.value = data.ansatz ?? 0;
+    recalcRowBetrag(row);
+  }
+
+  return row;
+}
+
+function renumberMaschinenRows() {
+  const list = $('#e-maschinen-list');
+  if (!list) return;
+  [...list.children].forEach((row, idx) => {
+    const label = row.querySelector('.m-header span');
+    if (label) label.textContent = 'Maschine ' + (idx + 1);
+  });
+}
+
+function recalcRowBetrag(row) {
+  const s = Number(row.querySelector('.m-std').value) || 0;
+  const a = Number(row.querySelector('.m-ansatz').value) || 0;
+  const betragEl = row.querySelector('.m-betrag');
+  const v = s * a;
+  betragEl.textContent = 'CHF ' + fmtCHF(v);
+  recalcTotalBetrag();
+}
+
+function recalcTotalBetrag() {
+  const list = $('#e-maschinen-list');
+  if (!list) return;
+  let total = 0;
+  [...list.children].forEach(row => {
+    const s = Number(row.querySelector('.m-std').value) || 0;
+    const a = Number(row.querySelector('.m-ansatz').value) || 0;
+    total += s * a;
+  });
+  const el = $('#e-betrag-total');
+  if (el) el.textContent = 'CHF ' + fmtCHF(total);
+}
+
+function resetMaschinenRows() {
+  const list = $('#e-maschinen-list');
+  if (list) list.innerHTML = '';
+  recalcTotalBetrag();
+}
+
+function getMaschinenRowsData() {
+  const list = $('#e-maschinen-list');
+  if (!list) return [];
+  return [...list.children].map(row => ({
+    maschine_id: row.querySelector('.m-select').value || null,
+    masch_std: Number(row.querySelector('.m-std').value) || 0,
+    ansatz: Number(row.querySelector('.m-ansatz').value) || 0
+  })).filter(r => r.maschine_id || r.masch_std > 0 || r.ansatz > 0);
+}
+
+$('#btn-add-maschine')?.addEventListener('click', () => addMaschineRow());
 
 $('#form-eintrag').addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -364,34 +480,61 @@ $('#form-eintrag').addEventListener('submit', async (ev) => {
   const alpname = $('#e-alpname').value;
   const arbeit  = $('#e-arbeit').value.trim();
   const mann    = Number($('#e-mann').value) || 0;
-  const maschId = $('#e-maschine').value || null;
-  const mStd    = Number($('#e-masch-std').value) || 0;
-  const ansatz  = Number($('#e-ansatz').value) || 0;
   const bem     = $('#e-bemerkung').value.trim() || null;
+  const maschRows = getMaschinenRowsData();
 
   if (!bestoesser_id) return setMsg('#e-msg', 'Bestösser wählen.', 'error');
   if (!datum || !arbeit) return setMsg('#e-msg', 'Datum und Arbeit erforderlich.', 'error');
   if (!canWriteAlp(alpname, bestoesser_id)) return setMsg('#e-msg', 'Keine Berechtigung für diese Alp / diesen Bestösser.', 'error');
 
-  const payload = {
-    bestoesser_id, datum, alpname, arbeit,
-    mann_std: mann, maschine_id: maschId, masch_std: mStd, ansatz,
-    bemerkung: bem, erstellt_von: state.user.id
-  };
+  const base = { bestoesser_id, datum, alpname, arbeit, bemerkung: bem, erstellt_von: state.user.id };
 
-  let res;
+  // Bearbeiten eines bestehenden Eintrags: wir aktualisieren den Haupt-Eintrag
+  // (erste Maschine oder keine) und hängen zusätzliche Maschinen als neue Einträge an.
   if (state.editId) {
-    res = await sb.from('eintraege').update(payload).eq('id', state.editId);
+    const first = maschRows[0] || { maschine_id: null, masch_std: 0, ansatz: 0 };
+    const res = await sb.from('eintraege').update({
+      ...base, mann_std: mann,
+      maschine_id: first.maschine_id, masch_std: first.masch_std, ansatz: first.ansatz
+    }).eq('id', state.editId);
+    if (res.error) return setMsg('#e-msg', res.error.message, 'error');
+
+    // Weitere Maschinen als zusätzliche Einträge anhängen
+    for (let i = 1; i < maschRows.length; i++) {
+      const m = maschRows[i];
+      const r = await sb.from('eintraege').insert({
+        ...base, mann_std: 0,
+        maschine_id: m.maschine_id, masch_std: m.masch_std, ansatz: m.ansatz
+      });
+      if (r.error) return setMsg('#e-msg', r.error.message, 'error');
+    }
   } else {
-    res = await sb.from('eintraege').insert(payload);
+    // Neu anlegen: 1 Eintrag wenn nur Mann-Std / keine Maschine,
+    // sonst 1 Eintrag pro Maschine (Mann-Std nur beim ersten Eintrag).
+    if (maschRows.length === 0) {
+      const r = await sb.from('eintraege').insert({
+        ...base, mann_std: mann,
+        maschine_id: null, masch_std: 0, ansatz: 0
+      });
+      if (r.error) return setMsg('#e-msg', r.error.message, 'error');
+    } else {
+      const rows = maschRows.map((m, idx) => ({
+        ...base,
+        mann_std: idx === 0 ? mann : 0,
+        maschine_id: m.maschine_id,
+        masch_std: m.masch_std,
+        ansatz: m.ansatz
+      }));
+      const r = await sb.from('eintraege').insert(rows);
+      if (r.error) return setMsg('#e-msg', r.error.message, 'error');
+    }
   }
-  if (res.error) return setMsg('#e-msg', res.error.message, 'error');
 
   setMsg('#e-msg', state.editId ? 'Aktualisiert.' : 'Gespeichert.', 'ok');
   state.editId = null;
   $('#form-eintrag').reset();
   $('#e-datum').value = todayISO();
-  $('#e-betrag').value = '';
+  resetMaschinenRows();
   await loadAll();
   renderAll();
 });
@@ -470,13 +613,13 @@ function editEintrag(id) {
   $('#e-alpname').value = e.alpname;
   $('#e-arbeit').value = e.arbeit;
   $('#e-mann').value = e.mann_std;
-  $('#e-maschine').value = e.maschine_id || '';
-  $('#e-masch-std').value = e.masch_std;
-  $('#e-ansatz').value = e.ansatz;
   $('#e-bemerkung').value = e.bemerkung || '';
-  recalcBetrag();
+  resetMaschinenRows();
+  if (e.maschine_id) {
+    addMaschineRow({ maschine_id: e.maschine_id, masch_std: e.masch_std, ansatz: e.ansatz });
+  }
   $$('.tab')[0].click();
-  setMsg('#e-msg', 'Eintrag wird bearbeitet. "Speichern" zum Übernehmen.', 'ok');
+  setMsg('#e-msg', 'Eintrag wird bearbeitet. "Speichern" zum Übernehmen. Zusätzliche Maschinen werden als neue Einträge angehängt.', 'ok');
 }
 
 async function deleteEintrag(id) {
@@ -1165,6 +1308,7 @@ function aufgabeInEintragUebernehmen(a) {
   $('#e-alpname').value = a.alpname;
   $('#e-arbeit').value = a.titel;
   if (a.beschreibung) $('#e-bemerkung').value = a.beschreibung;
+  resetMaschinenRows();
 
   // Bestösser vorauswählen: eigener Datensatz, sonst der Zugewiesene (falls gemappt),
   // sonst bleibt die bereits vorgewählte Option.
