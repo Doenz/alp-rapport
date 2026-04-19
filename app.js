@@ -316,39 +316,41 @@ function fillArbeitsartenList() {
   $('#list-arbeitsarten').innerHTML = state.arbeitsarten.map(a => `<option value="${escapeAttr(a.name)}">`).join('');
 }
 
-// Baut die Optionen für ein Maschinen-<select>, optional gefiltert nach Suchbegriff.
-function maschinenOptions(filterTerm = '') {
+// HTML für die Combobox-Dropdown-Liste (gefiltert).
+function buildDropdownHTML(filterTerm = '') {
   const term = filterTerm.trim().toLowerCase();
-  const filtered = !term ? state.maschinen : state.maschinen.filter(m =>
+  const active = state.maschinen.filter(m => m.aktiv !== false);
+  const filtered = !term ? active : active.filter(m =>
     m.name.toLowerCase().includes(term)
     || (m.kategorie || '').toLowerCase().includes(term)
   );
+  if (filtered.length === 0) {
+    return `<div class="m-option-empty">Keine Maschine gefunden.</div>`;
+  }
   const groups = {};
   for (const m of filtered) {
     const cat = m.kategorie || 'Übrige';
     (groups[cat] = groups[cat] || []).push(m);
   }
-  const parts = ['<option value="">— keine —</option>'];
+  const parts = [`<div class="m-option" data-id="" data-name="— keine —" data-ansatz="0" data-einheit="">— keine Maschine —</div>`];
   for (const cat of Object.keys(groups).sort((a,b) => a.localeCompare(b,'de'))) {
-    parts.push(`<optgroup label="${escapeAttr(cat)}">`);
+    parts.push(`<div class="m-opt-group">${escapeHtml(cat)}</div>`);
     for (const m of groups[cat].sort((a,b) => a.name.localeCompare(b.name,'de'))) {
-      parts.push(`<option value="${m.id}" data-ansatz="${m.ansatz}" data-einheit="${escapeAttr(m.einheit)}">${escapeHtml(m.name)} — CHF ${fmtCHF(m.ansatz)}/${escapeHtml(m.einheit)}</option>`);
+      parts.push(
+        `<div class="m-option" data-id="${m.id}" data-name="${escapeAttr(m.name)}" data-ansatz="${m.ansatz}" data-einheit="${escapeAttr(m.einheit)}">` +
+          `<strong>${escapeHtml(m.name)}</strong>` +
+          `<small>CHF ${fmtCHF(m.ansatz)} / ${escapeHtml(m.einheit)}</small>` +
+        `</div>`
+      );
     }
-    parts.push('</optgroup>');
   }
   return parts.join('');
 }
 
-// Initialbefüllung aller bereits vorhandenen Maschinen-<select> Elemente
-function fillMaschinenSelect() {
-  document.querySelectorAll('.m-select').forEach(sel => {
-    const v = sel.value;
-    sel.innerHTML = maschinenOptions();
-    sel.value = v;
-  });
-}
+// Platzhalter (wird von Multi-Row nicht mehr gebraucht, bleibt als no-op für Backwards-Compat)
+function fillMaschinenSelect() {}
 
-// Eine neue Maschinen-Zeile im Erfassen-Formular einfügen.
+// Eine Maschinen-Zeile mit Combobox-Suche einfügen.
 function addMaschineRow(data) {
   const list = $('#e-maschinen-list');
   if (!list) return;
@@ -360,8 +362,11 @@ function addMaschineRow(data) {
       <span>Maschine ${rowIdx + 1}</span>
       <button type="button" class="m-remove" title="Entfernen">✕</button>
     </div>
-    <input type="search" class="m-search" placeholder="🔍 Maschine suchen (Name oder Kategorie)…" />
-    <select class="m-select"></select>
+    <div class="m-combo">
+      <input type="search" class="m-search" placeholder="🔍 Maschine suchen oder antippen…" autocomplete="off" />
+      <div class="m-dropdown" hidden></div>
+    </div>
+    <input type="hidden" class="m-id" />
     <div class="two-col">
       <label>Anzahl / Std. / km / m³
         <input class="m-std" type="number" step="0.25" min="0" value="0" inputmode="decimal" />
@@ -374,33 +379,35 @@ function addMaschineRow(data) {
   `;
   list.appendChild(row);
 
-  const sel = row.querySelector('.m-select');
   const searchInput = row.querySelector('.m-search');
+  const dropdown = row.querySelector('.m-dropdown');
+  const hiddenId = row.querySelector('.m-id');
   const stdInput = row.querySelector('.m-std');
   const ansatzInput = row.querySelector('.m-ansatz');
-  const betragEl = row.querySelector('.m-betrag');
 
-  // Optionen befüllen
-  sel.innerHTML = maschinenOptions();
+  function openDropdown(term = '') {
+    dropdown.innerHTML = buildDropdownHTML(term);
+    dropdown.hidden = false;
+    dropdown.querySelectorAll('.m-option').forEach(opt => {
+      opt.addEventListener('mousedown', ev => ev.preventDefault()); // verhindert blur-vor-click
+      opt.addEventListener('click', () => {
+        hiddenId.value = opt.dataset.id || '';
+        searchInput.value = opt.dataset.name === '— keine —' ? '' : (opt.dataset.name || '');
+        ansatzInput.value = opt.dataset.id ? (opt.dataset.ansatz || 0) : 0;
+        dropdown.hidden = true;
+        recalcRowBetrag(row);
+      });
+    });
+  }
 
-  // Suche: filtert die Options in diesem Select
+  searchInput.addEventListener('focus', () => openDropdown(searchInput.value));
   searchInput.addEventListener('input', () => {
-    const v = sel.value;
-    sel.innerHTML = maschinenOptions(searchInput.value);
-    // Auswahl behalten, wenn sie noch im gefilterten Set ist
-    if ([...sel.options].some(o => o.value === v)) sel.value = v;
+    // Bei aktiver Textänderung: Auswahl verwerfen, bis neu ausgewählt
+    hiddenId.value = '';
+    openDropdown(searchInput.value);
   });
-
-  // Auswahl → Ansatz automatisch setzen
-  sel.addEventListener('change', () => {
-    const opt = sel.options[sel.selectedIndex];
-    if (opt.value) {
-      ansatzInput.value = opt.dataset.ansatz || 0;
-    } else {
-      ansatzInput.value = 0;
-    }
-    recalcRowBetrag(row);
-  });
+  // Blur mit kurzer Verzögerung, damit Klick auf Option noch feuert
+  searchInput.addEventListener('blur', () => setTimeout(() => { dropdown.hidden = true; }, 150));
 
   stdInput.addEventListener('input', () => recalcRowBetrag(row));
   ansatzInput.addEventListener('input', () => recalcRowBetrag(row));
@@ -411,9 +418,15 @@ function addMaschineRow(data) {
     recalcTotalBetrag();
   });
 
-  // Vorbefüllen (wenn beim Bearbeiten ein bestehender Eintrag geladen wird)
+  // Vorbefüllen beim Bearbeiten
   if (data) {
-    if (data.maschine_id) sel.value = data.maschine_id;
+    if (data.maschine_id) {
+      const m = state.maschinen.find(x => x.id === data.maschine_id);
+      if (m) {
+        hiddenId.value = m.id;
+        searchInput.value = m.name;
+      }
+    }
     stdInput.value = data.masch_std ?? 0;
     ansatzInput.value = data.ansatz ?? 0;
     recalcRowBetrag(row);
@@ -463,7 +476,7 @@ function getMaschinenRowsData() {
   const list = $('#e-maschinen-list');
   if (!list) return [];
   return [...list.children].map(row => ({
-    maschine_id: row.querySelector('.m-select').value || null,
+    maschine_id: row.querySelector('.m-id').value || null,
     masch_std: Number(row.querySelector('.m-std').value) || 0,
     ansatz: Number(row.querySelector('.m-ansatz').value) || 0
   })).filter(r => r.maschine_id || r.masch_std > 0 || r.ansatz > 0);

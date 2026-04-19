@@ -1,5 +1,5 @@
 // Alp-Rapport – Service Worker (einfacher App-Shell-Cache)
-const CACHE = 'alp-rapport-v2';
+const CACHE = 'alp-rapport-v3';
 const ASSETS = [
   './',
   './index.html',
