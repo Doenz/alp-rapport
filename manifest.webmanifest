@@ -1,0 +1,15 @@
+{
+  "name": "Alp-Rapport",
+  "short_name": "Alp-Rapport",
+  "description": "Stunden- und Maschinenrapport für Porteineralp und Sarneralp",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f7f5",
+  "theme_color": "#3a6b35",
+  "lang": "de-CH",
+  "icons": [
+    { "src": "icon.svg",  "sizes": "any",     "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#3a6b35"/>
+  <!-- Berge -->
+  <polygon points="40,380 180,180 260,280 340,160 470,380" fill="#e7f2e4" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+  <!-- Schnee -->
+  <polygon points="155,215 180,180 205,215 195,225 180,210 165,225" fill="#fff"/>
+  <polygon points="320,200 340,160 360,200 348,210 340,190 332,210" fill="#fff"/>
+  <!-- Kuhglocke -->
+  <g transform="translate(256,390)">
+    <path d="M -30 -10 L 30 -10 L 22 40 L -22 40 Z" fill="#c8a45c" stroke="#fff" stroke-width="4"/>
+    <rect x="-6" y="38" width="12" height="16" fill="#6b4b2a"/>
+    <path d="M -30 -10 Q 0 -28 30 -10" fill="none" stroke="#fff" stroke-width="4"/>
+  </g>
+</svg>

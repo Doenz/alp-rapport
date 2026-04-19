@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="de-CH">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="theme-color" content="#3a6b35" />
+  <title>Alp-Rapport</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- Login-Bildschirm -->
+<section id="view-login" class="view active">
+  <div class="login-box">
+    <h1>Alp-Rapport</h1>
+    <p class="sub">Anmelden mit E-Mail</p>
+    <label>E-Mail
+      <input id="login-email" type="email" autocomplete="email" required />
+    </label>
+    <label>Passwort
+      <input id="login-password" type="password" autocomplete="current-password" required />
+    </label>
+    <button id="btn-login" class="primary">Anmelden</button>
+    <button id="btn-signup" class="secondary">Neu registrieren</button>
+    <p id="login-msg" class="msg"></p>
+  </div>
+</section>
+
+<!-- Registrierung: Name und Rolle -->
+<section id="view-onboarding" class="view">
+  <div class="login-box">
+    <h1>Willkommen</h1>
+    <p class="sub">Einmalige Einrichtung des Profils.</p>
+    <label>Vor- und Nachname
+      <input id="ob-name" type="text" required />
+    </label>
+    <label>Rolle
+      <select id="ob-rolle" required>
+        <option value="">— wählen —</option>
+        <option value="bestoesser">Bestösser (eigene Stunden erfassen)</option>
+        <option value="alpmeister_portein">Alpmeister Porteineralp</option>
+        <option value="alpmeister_sarn">Alpmeister Sarneralp</option>
+        <option value="geschaeftsfuehrer">Geschäftsführer</option>
+      </select>
+    </label>
+    <button id="btn-ob-save" class="primary">Speichern</button>
+    <p id="ob-msg" class="msg"></p>
+  </div>
+</section>
+
+<!-- Bestösser verknüpfen – verpflichtend für Rolle "bestoesser", optional für andere -->
+<section id="view-link" class="view">
+  <div class="login-box">
+    <h1>Bestösser zuordnen</h1>
+    <p class="sub">Wähle deinen Bestösser-Datensatz für <span id="link-jahr"></span>.</p>
+    <label>Mein Eintrag
+      <select id="link-bestoesser">
+        <option value="">— wählen —</option>
+      </select>
+    </label>
+    <p id="link-empty" class="small" hidden>
+      Keine offenen Bestösser-Datensätze gefunden.<br>
+      Bitte frag deinen Alpmeister, dich für dieses Jahr anzulegen.
+    </p>
+    <button id="btn-link-save" class="primary">Zuordnen</button>
+    <button id="btn-link-skip" class="secondary" hidden>Später</button>
+    <button id="btn-link-logout" class="secondary">Abmelden</button>
+    <p id="link-msg" class="msg"></p>
+  </div>
+</section>
+
+<!-- Haupt-App -->
+<section id="view-app" class="view">
+  <header class="topbar">
+    <strong>Alp-Rapport</strong>
+    <span id="topbar-user" class="small"></span>
+    <button id="btn-logout" class="link">Abmelden</button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="erfassen">Erfassen</button>
+    <button class="tab" data-tab="eintraege">Einträge</button>
+    <button class="tab" data-tab="aufgaben">Aufgaben</button>
+    <button class="tab" data-tab="auswertung">Auswertung</button>
+    <button class="tab" data-tab="stammdaten">Stammdaten</button>
+    <button class="tab admin-tab" data-tab="admin">Administration</button>
+  </nav>
+
+  <!-- TAB: Erfassen -->
+  <div id="tab-erfassen" class="tab-panel active">
+    <h2>Neuer Eintrag</h2>
+    <form id="form-eintrag" class="form">
+      <label>Datum
+        <input id="e-datum" type="date" required />
+      </label>
+      <label>Bestösser
+        <select id="e-bestoesser" required></select>
+      </label>
+      <label>Alp
+        <select id="e-alpname" required>
+          <option value="Portein">Porteineralp</option>
+          <option value="Sarn">Sarneralp</option>
+        </select>
+      </label>
+      <label>Art der Arbeit
+        <input id="e-arbeit" list="list-arbeitsarten" required placeholder="auswählen oder tippen" />
+        <datalist id="list-arbeitsarten"></datalist>
+      </label>
+      <label>Mann-Stunden
+        <input id="e-mann" type="number" step="0.25" min="0" value="0" inputmode="decimal" />
+      </label>
+
+      <fieldset class="maschine-box">
+        <legend>Maschine (optional)</legend>
+        <label>Maschine
+          <select id="e-maschine">
+            <option value="">— keine —</option>
+          </select>
+        </label>
+        <div class="two-col">
+          <label>Anzahl / Std.
+            <input id="e-masch-std" type="number" step="0.25" min="0" value="0" inputmode="decimal" />
+          </label>
+          <label>Ansatz (CHF)
+            <input id="e-ansatz" type="number" step="0.01" min="0" value="0" inputmode="decimal" />
+          </label>
+        </div>
+        <label>Betrag
+          <input id="e-betrag" type="text" readonly />
+        </label>
+      </fieldset>
+
+      <label>Bemerkung
+        <textarea id="e-bemerkung" rows="2"></textarea>
+      </label>
+
+      <button type="submit" class="primary">Speichern</button>
+      <p id="e-msg" class="msg"></p>
+    </form>
+  </div>
+
+  <!-- TAB: Einträge -->
+  <div id="tab-eintraege" class="tab-panel">
+    <h2>Einträge</h2>
+    <div class="filter-row">
+      <label>Jahr
+        <select id="f-jahr"></select>
+      </label>
+      <label>Alp
+        <select id="f-alpname">
+          <option value="">alle</option>
+          <option value="Portein">Porteineralp</option>
+          <option value="Sarn">Sarneralp</option>
+        </select>
+      </label>
+      <label>Bestösser
+        <select id="f-bestoesser">
+          <option value="">alle</option>
+        </select>
+      </label>
+    </div>
+    <div id="eintraege-list" class="eintraege-list"></div>
+  </div>
+
+  <!-- TAB: Auswertung -->
+  <div id="tab-auswertung" class="tab-panel">
+    <h2>Jahres-Auswertung</h2>
+    <div class="filter-row">
+      <label>Jahr
+        <select id="a-jahr"></select>
+      </label>
+      <label>Alp
+        <select id="a-alpname">
+          <option value="">alle</option>
+          <option value="Portein">Porteineralp</option>
+          <option value="Sarn">Sarneralp</option>
+        </select>
+      </label>
+      <label>Bestösser
+        <select id="a-bestoesser">
+          <option value="">alle</option>
+        </select>
+      </label>
+      <label>Arbeit
+        <input id="a-arbeit" type="search" placeholder="Suche…" list="list-arbeitsarten" />
+      </label>
+      <button id="btn-export-pdf" class="secondary">📄 PDF</button>
+      <button id="btn-export-xlsx" class="secondary">📊 Excel</button>
+    </div>
+    <div id="auswertung-content"></div>
+  </div>
+
+  <!-- TAB: Aufgaben (To-Dos) -->
+  <div id="tab-aufgaben" class="tab-panel">
+    <h2>Aufgaben</h2>
+
+    <form id="form-aufgabe" class="form mgmt-form" hidden>
+      <h3>Neue Aufgabe</h3>
+      <label>Titel
+        <input id="t-titel" type="text" required />
+      </label>
+      <label>Beschreibung
+        <textarea id="t-beschreibung" rows="2"></textarea>
+      </label>
+      <div class="two-col">
+        <label>Alp
+          <select id="t-alpname">
+            <option value="">— beide —</option>
+            <option value="Portein">Porteineralp</option>
+            <option value="Sarn">Sarneralp</option>
+          </select>
+        </label>
+        <label>Priorität
+          <select id="t-prioritaet">
+            <option value="niedrig">niedrig</option>
+            <option value="normal" selected>normal</option>
+            <option value="hoch">hoch</option>
+          </select>
+        </label>
+      </div>
+      <div class="two-col">
+        <label>Frist
+          <input id="t-frist" type="date" />
+        </label>
+        <label>Zuweisen an
+          <select id="t-zugewiesen">
+            <option value="">— offen, alle dürfen übernehmen —</option>
+          </select>
+        </label>
+      </div>
+      <div class="inline-form">
+        <button type="submit" class="primary">Speichern</button>
+        <button type="button" id="btn-t-cancel" class="secondary">Abbrechen</button>
+      </div>
+      <p id="t-msg" class="msg"></p>
+    </form>
+
+    <div class="filter-row">
+      <button id="btn-aufgabe-neu" class="primary mgmt-only">+ Neue Aufgabe</button>
+      <label>Status
+        <select id="f-status">
+          <option value="offen" selected>offen</option>
+          <option value="erledigt">erledigt</option>
+          <option value="">alle</option>
+        </select>
+      </label>
+      <label>Alp
+        <select id="f-a-alpname">
+          <option value="">alle</option>
+          <option value="Portein">Porteineralp</option>
+          <option value="Sarn">Sarneralp</option>
+        </select>
+      </label>
+      <label>Zuweisung
+        <select id="f-a-zug">
+          <option value="">alle</option>
+          <option value="me">an mich</option>
+          <option value="none">offen (keine Zuweisung)</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="aufgaben-list" class="aufgaben-list"></div>
+  </div>
+
+  <!-- TAB: Stammdaten -->
+  <div id="tab-stammdaten" class="tab-panel">
+    <h2>Stammdaten</h2>
+
+    <details open>
+      <summary>Bestösser</summary>
+      <form id="form-bestoesser" class="form inline-form">
+        <input id="b-name" placeholder="Name" required />
+        <input id="b-nst" type="number" step="0.1" min="0" placeholder="NST" required />
+        <select id="b-alpname">
+          <option value="Portein">Porteineralp</option>
+          <option value="Sarn">Sarneralp</option>
+        </select>
+        <input id="b-jahr" type="number" min="2020" max="2100" placeholder="Jahr" required />
+        <button type="submit" class="primary">+</button>
+      </form>
+      <div id="bestoesser-list" class="stammdaten-list"></div>
+    </details>
+
+    <details>
+      <summary>Maschinen &amp; Ansätze <span class="small mgmt-hint">(Alpmeister, Geschäftsführer und Administrator können ändern)</span></summary>
+      <form id="form-maschine" class="form inline-form mgmt-only">
+        <input id="m-name" placeholder="Name" required />
+        <input id="m-ansatz" type="number" step="0.01" min="0" placeholder="Ansatz" required />
+        <input id="m-einheit" placeholder="Einheit (Std./km/m³)" value="Std." required />
+        <input id="m-kategorie" placeholder="Kategorie" />
+        <button type="submit" class="primary">+</button>
+      </form>
+      <div id="maschinen-list" class="stammdaten-list"></div>
+    </details>
+
+    <details>
+      <summary>Arbeitsarten <span class="small mgmt-hint">(Alpmeister, Geschäftsführer und Administrator können ändern)</span></summary>
+      <form id="form-arbeitsart" class="form inline-form mgmt-only">
+        <input id="aa-name" placeholder="Bezeichnung" required />
+        <button type="submit" class="primary">+</button>
+      </form>
+      <div id="arbeitsarten-list" class="stammdaten-list"></div>
+    </details>
+  </div>
+
+  <!-- TAB: Administration (nur für Admin / Geschäftsführer) -->
+  <div id="tab-admin" class="tab-panel">
+    <h2>Administration</h2>
+
+    <details open class="admin-only-detail">
+      <summary>Benutzerverwaltung <span class="small">(nur Administrator)</span></summary>
+      <p class="small" style="margin:.3rem 0 .6rem">
+        Der Administrator kann hier Rollen vergeben — inklusive <strong>Geschäftsführer</strong> —
+        und den Administrator-Status an andere User übertragen.
+      </p>
+      <div id="users-list" class="stammdaten-list"></div>
+    </details>
+
+    <details>
+      <summary>Audit-Log (letzte 100 Änderungen)</summary>
+      <div class="filter-row">
+        <label>Tabelle
+          <select id="audit-filter-tabelle">
+            <option value="">alle</option>
+            <option value="eintraege">Einträge</option>
+            <option value="bestoesser">Bestösser</option>
+            <option value="maschinen">Maschinen</option>
+            <option value="arbeitsarten">Arbeitsarten</option>
+            <option value="profiles">Profile</option>
+          </select>
+        </label>
+        <button id="btn-audit-reload" class="secondary">🔄 Aktualisieren</button>
+      </div>
+      <div id="audit-list" class="audit-list"></div>
+    </details>
+  </div>
+
+</section>
+
+<!-- Externe Libraries -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="config.js"></script>
+<script src="demo.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
