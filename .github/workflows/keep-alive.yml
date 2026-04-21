@@ -38,17 +38,36 @@ jobs:
             exit 1
           fi
 
-          # Ping 1: Health-Check der REST-API
-          echo "==> Ping REST-Root $SUPABASE_URL/rest/v1/"
-          curl -sSfL -o /dev/null -w "Status: %{http_code} (Zeit: %{time_total}s)\n" \
-            "$SUPABASE_URL/rest/v1/" \
-            -H "apikey: $SUPABASE_ANON_KEY"
+          # Für Keep-Alive zählt: Supabase antwortet überhaupt (egal mit welchem HTTP-Status).
+          # Nur ein komplett fehlschlagender Request (Netzwerk-Timeout = Status 000)
+          # ist ein echter Fehler.
 
-          # Ping 2: Einfache Select-Abfrage (RLS filtert auf 0 Zeilen, Hauptsache: DB wird angesprochen)
-          echo "==> Ping SELECT auf maschinen"
-          curl -sSfL -o /dev/null -w "Status: %{http_code} (Zeit: %{time_total}s)\n" \
-            "$SUPABASE_URL/rest/v1/maschinen?select=id&limit=1" \
-            -H "apikey: $SUPABASE_ANON_KEY" \
-            -H "Authorization: Bearer $SUPABASE_ANON_KEY"
+          ping() {
+            local url="$1"
+            local code
+            code=$(curl -sS --max-time 15 -o /dev/null -w "%{http_code}" \
+              "$url" \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" || echo "000")
+            echo "  Status $code → $url"
+            if [ "$code" = "000" ]; then
+              return 1
+            fi
+            return 0
+          }
 
-          echo "✅ Keep-Alive erfolgreich."
+          echo "==> Ping Auth-Settings (immer öffentlich erreichbar)"
+          ping "$SUPABASE_URL/auth/v1/settings" || {
+            echo "::error::Auth-Endpoint antwortet nicht — Projekt offline?"
+            exit 1
+          }
+
+          echo "==> Ping REST-Root"
+          ping "$SUPABASE_URL/rest/v1/" || {
+            echo "::warning::REST-Endpoint nicht erreichbar, aber Auth lief — DB zählt als aktiv."
+          }
+
+          echo "==> Ping SELECT auf bestoesser (auch 401/403 sind OK — DB wird angesprochen)"
+          ping "$SUPABASE_URL/rest/v1/bestoesser?select=id&limit=1" || true
+
+          echo "✅ Keep-Alive erfolgreich — Supabase hat geantwortet, Projekt bleibt aktiv."
