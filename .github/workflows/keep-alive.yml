@@ -1,0 +1,54 @@
+# =========================================================================
+# Supabase Keep-Alive
+# =========================================================================
+# Verhindert, dass das Supabase-Projekt nach 7 Tagen Inaktivität pausiert.
+# Führt automatisch 2x pro Woche (Montag + Donnerstag, 08:00 UTC) einen
+# einfachen REST-Call gegen die Datenbank aus — das zählt als Aktivität.
+#
+# GitHub führt Cron-Jobs auf ihren Servern aus, kostenlos.
+#
+# Einrichtung: siehe README-Abschnitt unten oder SETUP.md.
+# =========================================================================
+
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Montag und Donnerstag um 08:00 UTC (= 09:00 Winterzeit / 10:00 Sommerzeit in CH)
+    - cron: '0 8 * * 1,4'
+  # Manuell auslösbar über GitHub → Actions → Run workflow
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping Supabase REST-API
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Supabase pingen
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -e
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Secrets SUPABASE_URL und SUPABASE_ANON_KEY sind nicht gesetzt."
+            echo "Gehe zu Settings → Secrets and variables → Actions und lege beide an."
+            exit 1
+          fi
+
+          # Ping 1: Health-Check der REST-API
+          echo "==> Ping REST-Root $SUPABASE_URL/rest/v1/"
+          curl -sSfL -o /dev/null -w "Status: %{http_code} (Zeit: %{time_total}s)\n" \
+            "$SUPABASE_URL/rest/v1/" \
+            -H "apikey: $SUPABASE_ANON_KEY"
+
+          # Ping 2: Einfache Select-Abfrage (RLS filtert auf 0 Zeilen, Hauptsache: DB wird angesprochen)
+          echo "==> Ping SELECT auf maschinen"
+          curl -sSfL -o /dev/null -w "Status: %{http_code} (Zeit: %{time_total}s)\n" \
+            "$SUPABASE_URL/rest/v1/maschinen?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY"
+
+          echo "✅ Keep-Alive erfolgreich."
