@@ -247,7 +247,7 @@ async function loadAll() {
   const [bes, aa, ma, ei, au] = await Promise.all([
     sb.from('bestoesser').select('*').order('name'),
     sb.from('arbeitsarten').select('*').eq('aktiv', true).order('name'),
-    sb.from('maschinen').select('*').eq('aktiv', true).order('name'),
+    sb.from('maschinen').select('*').order('name'),
     sb.from('eintraege').select('*').order('datum', { ascending: false }),
     sb.from('aufgaben').select('*').order('erstellt_am', { ascending: false })
   ]);
@@ -1110,37 +1110,60 @@ function renderStammdaten() {
     });
   });
 
-  // Maschinen nach Kategorie gruppiert
+  // Maschinen nach Kategorie gruppiert (nur aktive im Admin-View)
   const mg = {};
-  for (const m of state.maschinen) (mg[m.kategorie || 'Übrige'] = mg[m.kategorie || 'Übrige'] || []).push(m);
+  for (const m of state.maschinen.filter(x => x.aktiv !== false))
+    (mg[m.kategorie || 'Übrige'] = mg[m.kategorie || 'Übrige'] || []).push(m);
   const mParts = [];
   for (const cat of Object.keys(mg).sort((a,b) => a.localeCompare(b,'de'))) {
     mParts.push(`<h4 class="small" style="margin:.6rem 0 .2rem;color:var(--green-dark)">${escapeHtml(cat)}</h4>`);
     for (const m of mg[cat].sort((a,b) => a.name.localeCompare(b.name,'de'))) {
       mParts.push(`
-      <div class="sd-row">
-        <span class="name">${escapeHtml(m.name)} · CHF ${fmtCHF(m.ansatz)} /${escapeHtml(m.einheit)}${m.quelle ? ` · <span class="small">${escapeHtml(m.quelle)}</span>` : ''}</span>
-        ${canEditMaster() ? `<button data-edit-m="${m.id}" title="Ansatz ändern">✎</button><button data-del-m="${m.id}" title="Löschen">✕</button>` : ''}
+      <div class="sd-row maschine-row" data-mid="${m.id}">
+        <span class="name" data-show="info">${escapeHtml(m.name)} · CHF ${fmtCHF(m.ansatz)} / ${escapeHtml(m.einheit)}${m.quelle ? ` · <span class="small">${escapeHtml(m.quelle)}</span>` : ''}</span>
+        <span data-edit-controls hidden>
+          <input type="text" data-edit="name" value="${escapeAttr(m.name)}" style="width:16em" placeholder="Name" />
+          <input type="number" step="0.01" min="0" data-edit="ansatz" value="${m.ansatz}" style="width:6em" />
+          <input type="text" data-edit="einheit" value="${escapeAttr(m.einheit)}" style="width:5em" placeholder="Einheit" />
+          <input type="text" data-edit="kategorie" value="${escapeAttr(m.kategorie||'')}" style="width:9em" placeholder="Kategorie" />
+          <button data-save>✓</button>
+          <button data-cancel>✕</button>
+        </span>
+        ${canEditMaster() ? `<button data-edit-m title="Bearbeiten">✎</button><button data-del-m title="Löschen">✕</button>` : ''}
       </div>`);
     }
   }
   $('#maschinen-list').innerHTML = mParts.join('') || '<p class="small">Keine Maschinen.</p>';
-  $$('#maschinen-list [data-del-m]').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Maschine deaktivieren?')) return;
-    const { error } = await sb.from('maschinen').update({ aktiv: false }).eq('id', btn.dataset.delM);
-    if (error) return alert(error.message);
-    await loadAll(); renderAll();
-  }));
-  $$('#maschinen-list [data-edit-m]').forEach(btn => btn.addEventListener('click', async () => {
-    const m = state.maschinen.find(x => x.id === btn.dataset.editM);
-    const v = prompt(`Neuer Ansatz für "${m.name}" (CHF):`, m.ansatz);
-    if (v == null) return;
-    const n = Number(v);
-    if (!Number.isFinite(n)) return alert('Ungültige Zahl.');
-    const { error } = await sb.from('maschinen').update({ ansatz: n }).eq('id', m.id);
-    if (error) return alert(error.message);
-    await loadAll(); renderAll();
-  }));
+  $$('#maschinen-list .maschine-row').forEach(row => {
+    const mid = row.dataset.mid;
+    row.querySelector('[data-edit-m]')?.addEventListener('click', () => {
+      row.querySelector('[data-show="info"]').hidden = true;
+      row.querySelector('[data-edit-controls]').hidden = false;
+      row.querySelectorAll('[data-edit-m],[data-del-m]').forEach(b => b.hidden = true);
+    });
+    row.querySelector('[data-cancel]')?.addEventListener('click', () => {
+      row.querySelector('[data-show="info"]').hidden = false;
+      row.querySelector('[data-edit-controls]').hidden = true;
+      row.querySelectorAll('[data-edit-m],[data-del-m]').forEach(b => b.hidden = false);
+    });
+    row.querySelector('[data-save]')?.addEventListener('click', async () => {
+      const name     = row.querySelector('[data-edit="name"]').value.trim();
+      const ansatz   = Number(row.querySelector('[data-edit="ansatz"]').value);
+      const einheit  = row.querySelector('[data-edit="einheit"]').value.trim() || 'Std.';
+      const kategorie= row.querySelector('[data-edit="kategorie"]').value.trim() || null;
+      if (!name || !Number.isFinite(ansatz)) return alert('Name und Ansatz erforderlich.');
+      const { error } = await sb.from('maschinen').update({ name, ansatz, einheit, kategorie }).eq('id', mid);
+      if (error) return alert(error.message);
+      await loadAll(); renderAll();
+    });
+    row.querySelector('[data-del-m]')?.addEventListener('click', async () => {
+      const m = state.maschinen.find(x => x.id === mid);
+      if (!confirm(`Maschine "${m?.name}" deaktivieren?`)) return;
+      const { error } = await sb.from('maschinen').update({ aktiv: false }).eq('id', mid);
+      if (error) return alert(error.message);
+      await loadAll(); renderAll();
+    });
+  });
 
   // Arbeitsarten
   $('#arbeitsarten-list').innerHTML = state.arbeitsarten.map(a => `
