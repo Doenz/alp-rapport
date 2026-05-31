@@ -62,12 +62,15 @@ jobs:
             exit 1
           }
 
-          echo "==> Ping REST-Root"
-          ping "$SUPABASE_URL/rest/v1/" || {
-            echo "::warning::REST-Endpoint nicht erreichbar, aber Auth lief — DB zählt als aktiv."
-          }
+          echo "==> Ping SELECT auf keep_alive (öffentlich lesbar, erzwingt echten DB-Zugriff)"
+          code=$(curl -sS --max-time 15 -o /dev/null -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/keep_alive?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" || echo "000")
+          echo "  Status $code"
+          if [ "$code" = "000" ]; then
+            echo "::error::DB-Ping fehlgeschlagen — Projekt offline oder keep_alive-Tabelle fehlt (siehe SQL)."
+            exit 1
+          fi
 
-          echo "==> Ping SELECT auf bestoesser (auch 401/403 sind OK — DB wird angesprochen)"
-          ping "$SUPABASE_URL/rest/v1/bestoesser?select=id&limit=1" || true
-
-          echo "✅ Keep-Alive erfolgreich — Supabase hat geantwortet, Projekt bleibt aktiv."
+          echo "✅ Keep-Alive erfolgreich — DB hat geantwortet (Status $code), Projekt bleibt aktiv."
