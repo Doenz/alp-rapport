@@ -278,9 +278,11 @@
         <input id="m-name" placeholder="Name" required />
         <input id="m-ansatz" type="number" step="0.01" min="0" placeholder="Ansatz" required />
         <input id="m-einheit" placeholder="Einheit (Std./km/m³)" value="Std." required />
-        <input id="m-kategorie" placeholder="Kategorie" />
+        <input id="m-kategorie" list="list-maschinenkat" placeholder="Kategorie (wählen oder tippen)" />
+        <datalist id="list-maschinenkat"></datalist>
         <button type="submit" class="primary">+</button>
       </form>
+      <p id="m-msg" class="msg"></p>
       <div id="maschinen-list" class="stammdaten-list"></div>
     </details>
 

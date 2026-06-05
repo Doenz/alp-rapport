@@ -277,6 +277,7 @@ function renderAll() {
   fillBestoesserSelects();
   fillArbeitsartenList();
   fillMaschinenSelect();
+  fillMaschinenKatList();
   fillJahrSelects();
   renderEintraege();
   renderAuswertung();
@@ -349,6 +350,13 @@ function buildDropdownHTML(filterTerm = '') {
 
 // Platzhalter (wird von Multi-Row nicht mehr gebraucht, bleibt als no-op für Backwards-Compat)
 function fillMaschinenSelect() {}
+
+function fillMaschinenKatList() {
+  const dl = $('#list-maschinenkat');
+  if (!dl) return;
+  const cats = [...new Set(state.maschinen.map(m => m.kategorie).filter(Boolean))].sort((a,b) => a.localeCompare(b,'de'));
+  dl.innerHTML = cats.map(c => `<option value="${escapeAttr(c)}">`).join('');
+}
 
 // Eine Maschinen-Zeile mit Combobox-Suche einfügen.
 function addMaschineRow(data) {
@@ -999,16 +1007,21 @@ $('#form-bestoesser').addEventListener('submit', async (ev) => {
 
 $('#form-maschine').addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  if (!canEditMaster()) return alert('Keine Berechtigung.');
-  const row = {
-    name: $('#m-name').value.trim(),
-    ansatz: Number($('#m-ansatz').value),
-    einheit: $('#m-einheit').value.trim() || 'Std.',
-    kategorie: $('#m-kategorie').value.trim() || null
-  };
-  const { error } = await sb.from('maschinen').insert(row);
-  if (error) return alert(error.message);
-  $('#form-maschine').reset(); $('#m-einheit').value = 'Std.';
+  if (!canEditMaster()) return setMsg('#m-msg', 'Keine Berechtigung.', 'error');
+  const name = $('#m-name').value.trim();
+  const ansatz = Number($('#m-ansatz').value);
+  const einheit = $('#m-einheit').value.trim() || 'Std.';
+  const kategorie = $('#m-kategorie').value.trim() || null;
+  if (!name) return setMsg('#m-msg', 'Name erforderlich.', 'error');
+  if (!Number.isFinite(ansatz)) return setMsg('#m-msg', 'Ansatz muss eine Zahl sein.', 'error');
+  setMsg('#m-msg', 'Speichere …');
+  const { error } = await sb.from('maschinen').insert({ name, ansatz, einheit, kategorie });
+  if (error) return setMsg('#m-msg', error.message, 'error');
+  setMsg('#m-msg', `"${name}" gespeichert.`, 'ok');
+  $('#m-name').value = '';
+  $('#m-ansatz').value = '';
+  $('#m-einheit').value = 'Std.';
+  $('#m-kategorie').value = '';
   await loadAll(); renderAll();
 });
 
@@ -1059,12 +1072,13 @@ function renderStammdaten() {
       return `
         <div class="sd-row bestoesser-row" data-bid="${b.id}">
           <span class="name">
-            <strong>${escapeHtml(b.name)}</strong> ·
+            <strong data-show="name">${escapeHtml(b.name)}</strong> ·
             <span data-show="alp">${escapeHtml(alpLabel(b.alpname))}</span> ·
             NST <span data-show="nst">${fmtNum(b.nst)}</span> ·
             ${b.jahr}${b.user_id ? ' · <span class="small">angemeldet</span>' : ''}
           </span>
           <span data-edit-controls hidden>
+            <input type="text" data-edit="name" value="${escapeAttr(b.name)}" style="width:12em" placeholder="Name" />
             <select data-edit="alpname">
               <option value="Portein"${b.alpname==='Portein'?' selected':''}>Porteineralp</option>
               <option value="Sarn"${b.alpname==='Sarn'?' selected':''}>Sarneralp</option>
@@ -1096,9 +1110,11 @@ function renderStammdaten() {
       row.querySelectorAll('[data-edit-b], [data-del-b]').forEach(b => b.hidden = false);
     });
     row.querySelector('[data-save]')?.addEventListener('click', async () => {
-      const alp = row.querySelector('[data-edit="alpname"]').value;
-      const nst = Number(row.querySelector('[data-edit="nst"]').value);
-      const { error } = await sb.from('bestoesser').update({ alpname: alp, nst }).eq('id', bid);
+      const name = row.querySelector('[data-edit="name"]').value.trim();
+      const alp  = row.querySelector('[data-edit="alpname"]').value;
+      const nst  = Number(row.querySelector('[data-edit="nst"]').value);
+      if (!name) return alert('Name darf nicht leer sein.');
+      const { error } = await sb.from('bestoesser').update({ name, alpname: alp, nst }).eq('id', bid);
       if (error) return alert(error.message);
       await loadAll(); renderAll();
     });
