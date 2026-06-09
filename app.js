@@ -24,6 +24,7 @@ const state = {
   profiles: [],         // nur Admin/GF laden alle Profile
   auditLog: [],         // lazy geladen beim Öffnen des Admin-Tabs
   editId: null,
+  editIds: null,   // alle IDs der aktuell bearbeiteten Gruppe
 };
 
 // ------ Kleine Helfer -------------------------------------------------------
@@ -351,6 +352,31 @@ function buildDropdownHTML(filterTerm = '') {
 // Platzhalter (wird von Multi-Row nicht mehr gebraucht, bleibt als no-op für Backwards-Compat)
 function fillMaschinenSelect() {}
 
+// Einträge mit gleichen Basisfeldern (Datum, Bestösser, Alp, Arbeit, Bemerkung) zu einer Gruppe zusammenfassen.
+function groupEintraege(eintraege) {
+  const groups = new Map();
+  for (const e of eintraege) {
+    const key = [e.datum, e.bestoesser_id, e.alpname, e.arbeit, e.bemerkung ?? ''].join('\x00');
+    if (!groups.has(key)) {
+      groups.set(key, {
+        ...e,
+        _ids: [e.id],
+        _maschinen: e.maschine_id
+          ? [{ maschine_id: e.maschine_id, masch_std: e.masch_std, ansatz: e.ansatz, betrag: e.betrag }]
+          : []
+      });
+    } else {
+      const g = groups.get(key);
+      g._ids.push(e.id);
+      if (e.mann_std) g.mann_std = (Number(g.mann_std) || 0) + Number(e.mann_std);
+      if (e.maschine_id) {
+        g._maschinen.push({ maschine_id: e.maschine_id, masch_std: e.masch_std, ansatz: e.ansatz, betrag: e.betrag });
+      }
+    }
+  }
+  return [...groups.values()];
+}
+
 function fillMaschinenKatList() {
   const dl = $('#list-maschinenkat');
   if (!dl) return;
@@ -520,7 +546,14 @@ $('#form-eintrag').addEventListener('submit', async (ev) => {
     }).eq('id', state.editId);
     if (res.error) return setMsg('#e-msg', res.error.message, 'error');
 
-    // Weitere Maschinen als zusätzliche Einträge anhängen
+    // Alte Zusatz-Einträge der Gruppe löschen
+    const otherIds = (state.editIds || []).filter(id => id !== state.editId);
+    if (otherIds.length > 0) {
+      const delRes = await sb.from('eintraege').delete().in('id', otherIds);
+      if (delRes.error) return setMsg('#e-msg', delRes.error.message, 'error');
+    }
+
+    // Neue Maschinen (ab Index 1) als zusätzliche Einträge einfügen
     for (let i = 1; i < maschRows.length; i++) {
       const m = maschRows[i];
       const r = await sb.from('eintraege').insert({
@@ -553,6 +586,7 @@ $('#form-eintrag').addEventListener('submit', async (ev) => {
 
   setMsg('#e-msg', state.editId ? 'Aktualisiert.' : 'Gespeichert.', 'ok');
   state.editId = null;
+  state.editIds = null;
   $('#form-eintrag').reset();
   $('#e-datum').value = todayISO();
   resetMaschinenRows();
@@ -595,12 +629,18 @@ function renderEintraege() {
 
   const bestMap = Object.fromEntries(state.bestoesser.map(b => [b.id, b]));
   const maschMap = Object.fromEntries(state.maschinen.map(m => [m.id, m]));
+  const grouped = groupEintraege(data);
 
-  list.innerHTML = data.map(e => {
+  list.innerHTML = grouped.map(e => {
     const b = bestMap[e.bestoesser_id];
-    const m = e.maschine_id ? maschMap[e.maschine_id] : null;
     const canEdit = canWriteAlp(e.alpname, e.bestoesser_id);
     const alpClass = e.alpname === 'Sarn' ? 'alp-sarn' : '';
+    const maschinenHtml = e._maschinen.map(md => {
+      const m = maschMap[md.maschine_id];
+      return m ? `🔧 ${escapeHtml(m.name)} ${fmtNum(md.masch_std)} ${escapeHtml(m.einheit)} × ${fmtCHF(md.ansatz)} = <strong>CHF ${fmtCHF(md.betrag)}</strong>` : '';
+    }).filter(Boolean).join('<br>');
+    const totalBetrag = e._maschinen.reduce((s, md) => s + Number(md.betrag || 0), 0);
+    const allIdsStr = e._ids.join(',');
     return `
       <div class="eintrag-card ${alpClass}">
         <div class="head">
@@ -610,25 +650,27 @@ function renderEintraege() {
         <div class="title">${escapeHtml(e.arbeit)}</div>
         <div class="meta">
           ${e.mann_std ? `👤 ${fmtNum(e.mann_std)} h` : ''}
-          ${m ? ` · 🔧 ${escapeHtml(m.name)} ${fmtNum(e.masch_std)} ${escapeHtml(m.einheit)} × ${fmtCHF(e.ansatz)} = <strong>CHF ${fmtCHF(e.betrag)}</strong>` : ''}
+          ${maschinenHtml ? (e.mann_std ? '<br>' : '') + maschinenHtml : ''}
+          ${e._maschinen.length > 1 ? `<br><strong>Maschinen-Total: CHF ${fmtCHF(totalBetrag)}</strong>` : ''}
           ${e.bemerkung ? `<br><em>${escapeHtml(e.bemerkung)}</em>` : ''}
         </div>
         ${canEdit ? `
           <div class="actions">
-            <button data-edit="${e.id}">bearbeiten</button>
-            <button class="del" data-del="${e.id}">löschen</button>
+            <button data-edit="${e._ids[0]}" data-ids="${allIdsStr}">bearbeiten</button>
+            <button class="del" data-del="${allIdsStr}">löschen</button>
           </div>` : ''}
       </div>`;
   }).join('');
 
-  list.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editEintrag(b.dataset.edit)));
+  list.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editEintrag(b.dataset.edit, b.dataset.ids)));
   list.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deleteEintrag(b.dataset.del)));
 }
 
-function editEintrag(id) {
+function editEintrag(id, allIdsStr) {
   const e = state.eintraege.find(x => x.id === id);
   if (!e) return;
   state.editId = id;
+  state.editIds = allIdsStr ? allIdsStr.split(',') : [id];
   $('#e-datum').value = e.datum;
   $('#e-bestoesser').value = e.bestoesser_id;
   $('#e-alpname').value = e.alpname;
@@ -636,16 +678,18 @@ function editEintrag(id) {
   $('#e-mann').value = e.mann_std;
   $('#e-bemerkung').value = e.bemerkung || '';
   resetMaschinenRows();
-  if (e.maschine_id) {
-    addMaschineRow({ maschine_id: e.maschine_id, masch_std: e.masch_std, ansatz: e.ansatz });
-  }
+  // Alle Maschinen der Gruppe laden
+  state.eintraege
+    .filter(x => state.editIds.includes(x.id) && x.maschine_id)
+    .forEach(ge => addMaschineRow({ maschine_id: ge.maschine_id, masch_std: ge.masch_std, ansatz: ge.ansatz }));
   $$('.tab')[0].click();
-  setMsg('#e-msg', 'Eintrag wird bearbeitet. "Speichern" zum Übernehmen. Zusätzliche Maschinen werden als neue Einträge angehängt.', 'ok');
+  setMsg('#e-msg', 'Eintrag wird bearbeitet. "Speichern" zum Übernehmen.', 'ok');
 }
 
-async function deleteEintrag(id) {
+async function deleteEintrag(idsStr) {
   if (!confirm('Eintrag wirklich löschen?')) return;
-  const { error } = await sb.from('eintraege').delete().eq('id', id);
+  const ids = idsStr.split(',');
+  const { error } = await sb.from('eintraege').delete().in('id', ids);
   if (error) return alert(error.message);
   await loadAll(); renderAll();
 }
