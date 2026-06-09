@@ -160,9 +160,9 @@ $('#btn-link-logout').addEventListener('click', async () => {
 
 // --- Rollen-basiertes UI -----------------------------------------------------
 function applyRolleUi() {
-  // Stammdaten-Tab für Bestösser ausblenden
+  // Stammdaten-Tab für Bestösser ausblenden (Admins immer sichtbar)
   const sdTab = document.querySelector('.tab[data-tab="stammdaten"]');
-  if (sdTab) sdTab.style.display = isBestoesser() ? 'none' : '';
+  if (sdTab) sdTab.style.display = (isBestoesser() && !canEditMaster()) ? 'none' : '';
 
   // Alp bei allen Rollen frei wählbar
   const eAlp = $('#e-alpname');
