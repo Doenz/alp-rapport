@@ -1212,8 +1212,23 @@ function renderStammdaten() {
       const einheit  = row.querySelector('[data-edit="einheit"]').value.trim() || 'Std.';
       const kategorie= row.querySelector('[data-edit="kategorie"]').value.trim() || null;
       if (!name || !Number.isFinite(ansatz)) return alert('Name und Ansatz erforderlich.');
+
+      // Prüfen ob sich der Ansatz geändert hat
+      const oldMaschine = state.maschinen.find(x => x.id === mid);
+      const ansatzGeaendert = oldMaschine && Number(oldMaschine.ansatz) !== ansatz;
+
       const { error } = await sb.from('maschinen').update({ name, ansatz, einheit, kategorie }).eq('id', mid);
       if (error) return alert(error.message);
+
+      // Ansatz in bestehenden Einträgen nachführen
+      if (ansatzGeaendert) {
+        const betroffene = state.eintraege.filter(e => e.maschine_id === mid);
+        if (betroffene.length > 0) {
+          const { error: eErr } = await sb.from('eintraege').update({ ansatz }).eq('maschine_id', mid);
+          if (eErr) return alert('Maschine gespeichert, aber Einträge konnten nicht aktualisiert werden: ' + eErr.message);
+        }
+      }
+
       await loadAll(); renderAll();
     });
     row.querySelector('[data-del-m]')?.addEventListener('click', async () => {
