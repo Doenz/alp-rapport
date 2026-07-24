@@ -294,24 +294,45 @@ $('#e-datum').value = todayISO();
 
 function fillBestoesserSelects() {
   const cur = new Date().getFullYear();
-  // Alle Rollen sehen alle aktiven Bestösser des aktuellen Jahres im Dropdown
   const pool = state.bestoesser.filter(b => b.jahr === cur && b.aktiv);
 
-  const fill = (sel, includeAll=false) => {
-    const s = $(sel);
-    const v = s.value;
-    s.innerHTML = (includeAll ? '<option value="">alle</option>' : '<option value="">— wählen —</option>')
-      + pool.map(b => `<option value="${b.id}">${b.name} (${alpLabel(b.alpname)})</option>`).join('');
-    // Bestehende Auswahl erhalten, sonst: eigener Datensatz als Default (falls vorhanden)
-    if (v && [...s.options].some(o => o.value === v)) {
-      s.value = v;
-    } else if (!includeAll && state.myBestoesser) {
-      s.value = state.myBestoesser.id;
+  // Erfassen-Dropdown: ein Bestösser darf nur für sich selbst erfassen
+  // (canWriteAlp lässt nur den eigenen Datensatz zu). Auswahl daher fixieren,
+  // damit keine Option angeboten wird, die beim Speichern abgelehnt würde.
+  const eSel = $('#e-bestoesser');
+  if (eSel) {
+    if (isBestoesser() && state.myBestoesser) {
+      eSel.innerHTML = `<option value="${state.myBestoesser.id}">${escapeHtml(state.myBestoesser.name)} (${escapeHtml(alpLabel(state.myBestoesser.alpname))})</option>`;
+      eSel.value = state.myBestoesser.id;
+      eSel.disabled = true;
+    } else {
+      const v = eSel.value;
+      eSel.innerHTML = '<option value="">— wählen —</option>'
+        + pool.map(b => `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(alpLabel(b.alpname))})</option>`).join('');
+      if (v && [...eSel.options].some(o => o.value === v)) eSel.value = v;
+      else if (state.myBestoesser) eSel.value = state.myBestoesser.id;
+      eSel.disabled = false;
     }
-    s.disabled = false;
-  };
-  fill('#e-bestoesser');
-  fill('#f-bestoesser', true);
+  }
+
+  // Filter-Dropdown der Einträge-Liste wird jahresabhängig befüllt.
+  fillEintraegeBestoesserSelect();
+}
+
+// Bestösser-Filter der Einträge-Liste passend zum gewählten Jahr befüllen –
+// Bestösser-Datensätze haben pro Jahr eine eigene ID, sonst greift der Filter
+// für frühere Jahre ins Leere und vorhandene Einträge verschwinden.
+function fillEintraegeBestoesserSelect() {
+  const sel = $('#f-bestoesser');
+  if (!sel) return;
+  const jahr = Number($('#f-jahr')?.value) || new Date().getFullYear();
+  const cur = sel.value;
+  const pool = state.bestoesser
+    .filter(b => b.jahr === jahr)
+    .sort((a,b) => a.name.localeCompare(b.name,'de'));
+  sel.innerHTML = '<option value="">alle</option>'
+    + pool.map(b => `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(alpLabel(b.alpname))})</option>`).join('');
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
 }
 
 function fillArbeitsartenList() {
@@ -623,6 +644,7 @@ function filteredEintraege() {
 }
 
 function renderEintraege() {
+  fillEintraegeBestoesserSelect();
   const list = $('#eintraege-list');
   const data = filteredEintraege();
   if (!data.length) { list.innerHTML = '<p class="small">Keine Einträge.</p>'; return; }
@@ -709,9 +731,10 @@ function currentAuswertungFilter() {
     bestId:     $('#a-bestoesser')?.value || '',
     arbeitTerm: ($('#a-arbeit')?.value || '').trim().toLowerCase()
   };
-  // Bestösser: immer auf eigene Daten einschränken, egal was im UI steht
+  // Bestösser: immer nur die eigenen Einträge – aber über ALLE Alpen hinweg,
+  // damit auch Stunden sichtbar sind, die auf einer anderen als der
+  // registrierten Alp erfasst wurden. Die Alp bleibt ein optionaler Filter.
   if (isBestoesser() && state.myBestoesser) {
-    f.alp    = state.myBestoesser.alpname;
     f.bestId = state.myBestoesser.id;
   }
   return f;
@@ -755,12 +778,11 @@ function fillAuswertungSelects() {
   const alpSel  = $('#a-alpname');
   const bestSel = $('#a-bestoesser');
 
-  // Bestösser: Filter-Felder auf eigenen Datensatz fixieren und sperren
+  // Bestösser: nur der Bestösser-Filter ist fixiert (eigene Daten). Die Alp
+  // bleibt frei wählbar ("alle" als Default), damit auch Stunden auf einer
+  // anderen als der registrierten Alp sichtbar sind.
   if (isBestoesser() && state.myBestoesser) {
-    if (alpSel) {
-      alpSel.value = state.myBestoesser.alpname;
-      alpSel.disabled = true;
-    }
+    if (alpSel) alpSel.disabled = false;
     if (bestSel) {
       bestSel.innerHTML = `<option value="${state.myBestoesser.id}">${escapeHtml(state.myBestoesser.name)}</option>`;
       bestSel.value = state.myBestoesser.id;
@@ -1297,12 +1319,13 @@ function filteredAufgaben() {
   if (f.alp)    data = data.filter(a => a.alpname === f.alp);
   if (f.zug === 'me')   data = data.filter(a => a.zugewiesen_an === state.user?.id);
   if (f.zug === 'none') data = data.filter(a => !a.zugewiesen_an);
-  // Bestösser sieht nur eigene Zuweisungen + offene (ohne Zuweisung) seiner Alp
+  // Bestösser sieht eigene Zuweisungen + alle noch nicht übernommenen Aufgaben
+  // beider Alpen – er darf auf beiden Alpen mithelfen und erfassen. Über den
+  // Alp-Filter oben lässt sich die Ansicht bei Bedarf eingrenzen.
   if (isBestoesser()) {
-    const myAlp = state.myBestoesser?.alpname;
     data = data.filter(a =>
       a.zugewiesen_an === state.user.id
-      || (!a.zugewiesen_an && (!a.alpname || a.alpname === myAlp))
+      || !a.zugewiesen_an
     );
   }
   return data;
